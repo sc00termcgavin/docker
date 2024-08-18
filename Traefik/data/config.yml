@@ -1,0 +1,65 @@
+http:
+ # region routers
+ # Defined HTTP routers that handle incoming requests/route to the appropriate service 
+  routers:
+    pihole:
+      entryPoints:
+        - "https"
+      rule: "Host(`pihole.local.surveillancelabs.net`)"
+      middlewares:
+        - redirectregex-pihole # Middleware to handle regex-based redirects for pihole
+        - default-headers      # Apply default security headers
+        - addprefix-pihole     # Add a prefix to the request path for pihole
+        - https-redirectscheme # Redirect HTTP traffic to HTTPS
+      tls: {}                  # Enable TLS (HTTPS) for this router
+      service: pihole          # Define the backend service to route the request to
+
+#endregion
+#region services that routers will forward requests to
+  services:
+    pihole:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.69.69:80"  # Server URL for service
+        passHostHeader: true    # Pass original host header to backend service
+  
+#endregion
+  middlewares:
+    addprefix-pihole:
+      addPrefix:
+        prefix: "/admin"
+    https-redirectscheme:
+      redirectScheme:
+        scheme: https
+        permanent: true      # Use a permanent (301) redirect
+    redirectregex-pihole:
+      redirectRegex:
+        regex: "/admin/(.*)" # Match the request path starting with "/admin/"
+        replacement: /
+
+    default-headers:
+      headers:
+        frameDeny: true            # Prevent clickjacking by not allowing the site to be framed
+        browserXssFilter: true     # Enable the XSS filter in the browser
+        contentTypeNosniff: true   # Prevent MIME type sniffing
+        forceSTSHeader: true       # Force the use of the Strict-Transport-Security header
+        stsIncludeSubdomains: true # Apply HSTS to all subdomains
+        stsPreload: true           # Preload the HSTS configuration in browsers
+        stsSeconds: 15552000       # Set the max age for HSTS (6 months)
+        customFrameOptionsValue: SAMEORIGIN   # Allow framing from the same origin only
+        customRequestHeaders:
+          X-Forwarded-Proto: https            # Forward the original request protocol (HTTP/HTTPS)
+
+    default-whitelist:
+      ipAllowList:
+        sourceRange:
+        # Trust reverse proxies in these local domains. Reduce to your subnet
+        - "10.0.0.0/8"
+        - "192.168.0.0/16"
+        - "172.16.0.0/12"
+
+    secured:
+      chain:
+        middlewares:
+        - default-whitelist
+        - default-headers
